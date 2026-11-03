@@ -1,0 +1,69 @@
+# Maintainer: Plyrs1 <me@plyrs.eu.org>
+# Upstream: https://github.com/ZSeven-W/openpencil
+
+pkgname=openpencil-bin
+pkgver=0.8.5
+pkgrel=1
+pkgdesc='Open-source AI-native vector design tool (prebuilt binary)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/ZSeven-W/openpencil'
+license=('MIT')
+provides=('openpencil')
+conflicts=('openpencil')
+depends=('fontconfig' 'gcc-libs' 'zlib' 'hicolor-icon-theme' 'shared-mime-info')
+source_x86_64=("openpencil-desktop-${pkgver}-x86_64.tar.gz::${url}/releases/download/v${pkgver}/openpencil-desktop-linux-x86_64.tar.gz"
+               "openpencil-icon.png::https://raw.githubusercontent.com/ZSeven-W/openpencil/v${pkgver}/crates/op-host-desktop/assets/icon.png")
+source_aarch64=("openpencil-desktop-${pkgver}-aarch64.tar.gz::${url}/releases/download/v${pkgver}/openpencil-desktop-linux-aarch64.tar.gz"
+                "openpencil-icon.png::https://raw.githubusercontent.com/ZSeven-W/openpencil/v${pkgver}/crates/op-host-desktop/assets/icon.png")
+sha256sums_x86_64=('0e554f611e6406d9819e35e204a640586cf656cb5b4ad051b0a31c2783046b24'
+                   'd4dcfe16a1cdfc2f7caaf945f84582fb02404f67024ffd6294f1d138fab67941')
+sha256sums_aarch64=('3ed57eab1239147ed861cd3f18b4df9fbe0544ae412fc763c41d4a1577c1be58'
+                    'd4dcfe16a1cdfc2f7caaf945f84582fb02404f67024ffd6294f1d138fab67941')
+
+package() {
+  depends=('fontconfig' 'gcc-libs' 'zlib')
+
+  # main binary
+  install -Dm755 "${srcdir}/openpencil-desktop" \
+    "${pkgdir}/usr/bin/openpencil-desktop"
+
+  # desktop entry (mirrors upstream packaging/scripts/package-linux-common.sh)
+  install -Dm644 /dev/stdin "${pkgdir}/usr/share/applications/openpencil.desktop" <<'EOF'
+[Desktop Entry]
+Name=OpenPencil
+Comment=Open-source AI-native vector design tool
+Exec=openpencil-desktop %U
+Terminal=false
+Type=Application
+Icon=openpencil
+StartupWMClass=openpencil
+Categories=Graphics;
+MimeType=application/x-openpencil;
+EOF
+
+  # .op / .pen file association
+  install -Dm644 /dev/stdin "${pkgdir}/usr/share/mime/packages/openpencil.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-openpencil">
+    <comment>OpenPencil Document</comment>
+    <glob pattern="*.op"/>
+    <glob pattern="*.pen"/>
+    <icon name="openpencil"/>
+  </mime-type>
+</mime-info>
+EOF
+
+  # app icon
+  install -Dm644 "${srcdir}/openpencil-icon.png" \
+    "${pkgdir}/usr/share/icons/hicolor/1024x1024/apps/openpencil.png"
+
+  # font license notices bundled with the release
+  if [ -d "${srcdir}/font-notices" ]; then
+    local f
+    for f in "${srcdir}/font-notices"/*; do
+      install -Dm644 "$f" \
+        "${pkgdir}/usr/share/licenses/${pkgname}/font-notices/$(basename "$f")"
+    done
+  fi
+}

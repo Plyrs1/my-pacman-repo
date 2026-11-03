@@ -1,0 +1,8 @@
+# package sources only; built artifacts live in x86_64/ and ARE committed
+pkgs/*/src/
+pkgs/*/pkg/
+pkgs/*/*.tar.gz
+pkgs/*/*.tar.xz
+pkgs/*/*.zip
+pkgs/*/openpencil-icon.png
+*.pkg.tar.zst.sig
