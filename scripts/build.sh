@@ -11,7 +11,8 @@ repo="$root/x86_64"
 [ -f "$pkgdir/PKGBUILD" ] || { echo "no pkgs/$name/PKGBUILD" >&2; exit 1; }
 mkdir -p "$repo"
 
-# keyring issues when running as root etc. are not expected for personal builds
+# Sources are cached in the pkgs dir (SRCDEST) and removed after the move
+# below, keeping the working tree clean.
 cd "$pkgdir"
 SRCDEST="$pkgdir" makepkg -f
 
@@ -24,6 +25,8 @@ pkgs=( "$name"-*.pkg.tar.* )
 shopt -u nullglob
 [ "${#pkgs[@]}" -gt 0 ] || { echo "build produced no package" >&2; exit 1; }
 mv "${pkgs[@]}" "$repo/"
+rm -rf "$pkgdir/src" "$pkgdir/pkg"
+find "$pkgdir" -maxdepth 1 -type f ! -name PKGBUILD -delete
 
 cd "$repo"
 rm -f personal.db personal.db.tar.gz personal.files personal.files.tar.gz

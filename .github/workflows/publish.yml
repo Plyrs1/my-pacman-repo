@@ -15,22 +15,64 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: Trust PKGBUILDs for makepkg (non-root builder user)
+        run: |
+          # makepkg refuses to run as root; use the unprivileged 'build' user
+          useradd -m build
+          printf 'build ALL=(ALL) NOPASSWD: ALL\n' >/etc/sudoers.d/build
+
+      - uses: actions/checkout@v4
+
+      - name: Build all packages
+        run: |
+          chown -R build:build "$GITHUB_WORKSPACE"
+          sudo -u build /bin/bash -c '
+            set -e
+            for pkg in pkgs/*/; do
+              name="${pkg#pkgs/}"; name="${name%/}"
+              scripts/build.sh "$name"
+            done
+          '
+
+      - name: Upload repo artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo
+          path: x86_64/
+          if-no-files-found: error
+
   publish:
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: repo
+          path: x86_64
 
-      # Sanity check: the database must match the packages actually present.
       - name: Verify database matches packages
         run: |
           cd x86_64
-          # repo-add is available via pacman on Arch images; on Ubuntu use bsdtar check
           for db in personal.db.tar.gz; do
             bsdtar -tf "$db" >/dev/null
           done
+          # every package file must have a db entry
+          python3 - <<'EOF'
+          import tarfile, glob, os
+          with tarfile.open('personal.db.tar.gz') as db:
+              names = {os.path.basename(m).split('/')[0] for m in db.getnames() if '/' in m}
+          pkgs = {os.path.basename(p) for p in glob.glob('*.pkg.tar.zst')}
+          missing = pkgs - names
+          assert not missing, f"packages missing from db: {missing}"
+          EOF
 
       - uses: actions/configure-pages@v5
 

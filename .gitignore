@@ -1,4 +1,5 @@
-# package sources only; built artifacts live in x86_64/ and ARE committed
+# build artifacts are produced in CI and served via GitHub Pages
+x86_64/
 pkgs/*/src/
 pkgs/*/pkg/
 pkgs/*/*.tar.gz
