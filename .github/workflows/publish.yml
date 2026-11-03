@@ -19,7 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
+    defaults:
+      run:
+        shell: bash
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Trust PKGBUILDs for makepkg (non-root builder user)
         run: |
           # makepkg refuses to run as root; use the unprivileged 'build' user
@@ -72,24 +78,35 @@ jobs:
       - name: Verify database matches packages
         run: |
           cd x86_64
-          for db in personal.db.tar.gz; do
-            bsdtar -tf "$db" >/dev/null
-          done
-          # every package file must have a db entry
           python3 - <<'EOF'
-          import tarfile, glob, os
+          import glob
+          import os
+          import tarfile
+
           with tarfile.open('personal.db.tar.gz') as db:
-              names = {os.path.basename(m).split('/')[0] for m in db.getnames() if '/' in m}
-          pkgs = {os.path.basename(p) for p in glob.glob('*.pkg.tar.zst')}
-          missing = pkgs - names
-          assert not missing, f"packages missing from db: {missing}"
+              filenames = set()
+              for member in db.getmembers():
+                  if member.isfile() and member.name.endswith('/desc'):
+                      fields = db.extractfile(member).read().decode().splitlines()
+                      filenames.add(fields[fields.index('%FILENAME%') + 1])
+          packages = {os.path.basename(path) for path in glob.glob('*.pkg.tar.zst')}
+          assert packages, 'no packages to publish'
+          assert packages == filenames, (
+              f'database mismatch: missing entries={packages - filenames}, '
+              f'missing packages={filenames - packages}'
+          )
           EOF
 
       - uses: actions/configure-pages@v5
 
+      - name: Stage repository under x86_64
+        run: |
+          mkdir -p public
+          mv x86_64 public/
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: x86_64
+          path: public
 
       - id: deployment
         uses: actions/deploy-pages@v4

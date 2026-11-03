@@ -2,7 +2,7 @@
 
 A pacman binary repository. **Nothing binary is stored in git** — only
 PKGBUILDs are committed. On every push to `main`, GitHub Actions builds all
-packages from source in an `archlinux:base-devel` container and publishes the
+packages from their recipes in an `archlinux:base-devel` container and publishes the
 resulting `x86_64/` repo (packages + database) to **GitHub Pages**, where
 pacman consumes it.
 
@@ -18,7 +18,7 @@ Append to `/etc/pacman.conf`:
 
 ```ini
 [personal]
-SigLevel = PackageRequired
+SigLevel = Never
 Server = https://plyrs1.github.io/my-pacman-repo/x86_64
 ```
 
@@ -30,15 +30,16 @@ pacman -Sl personal          # list packages
 sudo pacman -S openpencil-bin
 ```
 
-> **Unsigned repo:** because this repo is not GPG-signed, `SigLevel =
-> PackageRequired` means pacman checks the package's *internal* md5/sha256
-> (recorded in the built package) but not a publisher signature. This is the
-> minimum-safe setting for a personal repo over HTTPS.
+> **Unsigned repo:** `SigLevel = Never` disables GPG signature checks for this
+> repository. Database checksums detect corruption but do not authenticate the
+> publisher. Use this only if you trust the repository and its HTTPS hosting.
+> `PackageRequired` requires a package signature; it does not mean checksum-only
+> verification and will reject these unsigned packages.
 
 ## Repo layout
 
 ```
-pkgs/<pkgname>/PKGBUILD   # one directory per package — the only thing in git
+pkgs/<pkgname>/PKGBUILD   # one directory per package
 .github/workflows/publish.yml  # CI: build all pkgs, publish x86_64/ via Pages
 scripts/                  # build.sh, rebuild-db.sh (used by CI and locally)
 ```
@@ -57,6 +58,20 @@ Pushing to `main` triggers the workflow, which builds every package under
 `pkgs/` and re-publishes the whole repo. Nothing else to do.
 
 First-time setup (once): **Settings → Pages → Source: GitHub Actions**.
+
+### CI build and publish flow
+
+The build job first checks out the repository with `actions/checkout`, then
+installs dependencies and runs `scripts/build.sh` as an unprivileged user.
+Without checkout, neither `pkgs/` nor `scripts/` exists on the runner; the
+unmatched `pkgs/*/` glob still enters the build loop and fails with
+`scripts/build.sh: No such file or directory`.
+
+The publish job checks each database entry's `%FILENAME%` against the generated
+package filenames. Database directory names are not package filenames. It
+then stages `public/x86_64/` as the Pages artifact so the client URL above
+matches the deployed layout. Publishing uses Python's standard library for
+database inspection, without requiring `bsdtar` on the Ubuntu runner.
 
 ## Removing a package
 
