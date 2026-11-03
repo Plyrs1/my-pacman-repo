@@ -26,7 +26,18 @@ jobs:
           useradd -m build
           printf 'build ALL=(ALL) NOPASSWD: ALL\n' >/etc/sudoers.d/build
 
-      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          # container ships with no synced databases
+          pacman -Syu --noconfirm
+          # gather depends+makedepends from every PKGBUILD and install them
+          deps=$(for pkg in pkgs/*/; do
+            source "${pkg}PKGBUILD"
+            printf '%s\n' "${depends[@]}" "${makedepends[@]}"
+          done | sort -u)
+          if [ -n "$deps" ]; then
+            pacman -S --noconfirm --needed $deps
+          fi
 
       - name: Build all packages
         run: |
