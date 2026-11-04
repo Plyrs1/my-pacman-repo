@@ -7,3 +7,5 @@ pkgs/*/*.tar.xz
 pkgs/*/*.zip
 pkgs/*/openpencil-icon.png
 *.pkg.tar.zst.sig
+__pycache__/
+*.py[cod]

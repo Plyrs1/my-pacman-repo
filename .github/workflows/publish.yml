@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * *'
 
 permissions:
   contents: read
@@ -19,6 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
+      updated: ${{ steps.release.outputs.updated }}
+      commit_message: ${{ steps.release.outputs.commit_message }}
     defaults:
       run:
         shell: bash
@@ -28,15 +34,34 @@ jobs:
 
       - name: Trust PKGBUILDs for makepkg (non-root builder user)
         run: |
-          # makepkg refuses to run as root; use the unprivileged 'build' user
           useradd -m build
           printf 'build ALL=(ALL) NOPASSWD: ALL\n' >/etc/sudoers.d/build
+          chown -R build:build "$GITHUB_WORKSPACE"
+
+      - name: Install updater prerequisites
+        run: pacman -Syu --noconfirm python pacman-contrib
+
+      - name: Check upstream releases
+        id: release
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
+            summary=$(sudo -u build python3 scripts/check-updates.py)
+            if [[ -n "$summary" ]]; then
+              echo "updated=true" >>"$GITHUB_OUTPUT"
+              echo "publish=true" >>"$GITHUB_OUTPUT"
+              echo "commit_message=chore(packages): update ${summary}" >>"$GITHUB_OUTPUT"
+            else
+              echo "updated=false" >>"$GITHUB_OUTPUT"
+              echo "publish=false" >>"$GITHUB_OUTPUT"
+            fi
+          else
+            echo "updated=false" >>"$GITHUB_OUTPUT"
+            echo "publish=true" >>"$GITHUB_OUTPUT"
+          fi
 
       - name: Install build dependencies
+        if: steps.release.outputs.publish == 'true'
         run: |
-          # container ships with no synced databases
-          pacman -Syu --noconfirm
-          # gather depends+makedepends from every PKGBUILD and install them
           deps=$(for pkg in pkgs/*/; do
             source "${pkg}PKGBUILD"
             printf '%s\n' "${depends[@]}" "${makedepends[@]}"
@@ -46,8 +71,8 @@ jobs:
           fi
 
       - name: Build all packages
+        if: steps.release.outputs.publish == 'true'
         run: |
-          chown -R build:build "$GITHUB_WORKSPACE"
           sudo -u build /bin/bash -c '
             set -e
             for pkg in pkgs/*/; do
@@ -57,19 +82,32 @@ jobs:
           '
 
       - name: Upload repo artifact
+        if: steps.release.outputs.publish == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: repo
           path: x86_64/
           if-no-files-found: error
 
+      - name: Upload updated recipes
+        if: steps.release.outputs.updated == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: updated-recipes
+          path: pkgs/*/PKGBUILD
+          if-no-files-found: error
+
   publish:
     needs: build
+    if: needs.build.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: repo
@@ -99,14 +137,49 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
-      - name: Stage repository under x86_64
+      - name: Stage repository and landing page
         run: |
           mkdir -p public
           mv x86_64 public/
-
+          cp index.html public/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public
 
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  record-update:
+    needs: [build, publish]
+    if: needs.build.outputs.updated == 'true' && needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      COMMIT_MESSAGE: ${{ needs.build.outputs.commit_message }}
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Download updated recipes
+        uses: actions/download-artifact@v4
+        with:
+          name: updated-recipes
+          path: pkgs
+
+      - name: Commit updated recipe
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || {
+            echo 'main advanced during the scheduled run; refusing to overwrite recipes' >&2
+            exit 1
+          }
+          git add pkgs/*/PKGBUILD
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "$COMMIT_MESSAGE"
+          git push origin HEAD:main
