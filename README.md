@@ -11,6 +11,7 @@ pacman consumes it.
 | Package | Version | Description | Upstream |
 |---------|---------|-------------|----------|
 | openpencil-bin | See [`pkgs/openpencil-bin/PKGBUILD`](pkgs/openpencil-bin/PKGBUILD) | Open-source AI-native vector design tool (prebuilt binary) | https://github.com/ZSeven-W/openpencil |
+| hermes-decomp | See [`pkgs/hermes-decomp/PKGBUILD`](pkgs/hermes-decomp/PKGBUILD) | Rust decompiler for Hermes bytecode (.hbc) files | https://github.com/SymbioticSec/hermes-decomp |
 
 ## Client setup
 
@@ -58,9 +59,10 @@ Pushing to `main` triggers the workflow, which builds every package under
 `pkgs/` and re-publishes the whole repo. Use a Conventional Commit for manual
 recipe edits, for example `chore(packages): update openpencil-bin to 0.8.6-1`.
 
-The workflow checks OpenPencil releases daily at 02:17 UTC. It includes
-published prereleases because the current upstream release is marked as a
-prerelease. A newer release updates the recipe only after both architecture
+The workflow checks registered upstream releases daily at 02:17 UTC. For
+`openpencil-bin` it includes published prereleases because the current upstream
+release is marked as a prerelease; for `hermes-decomp` it tracks stable
+releases. A newer release updates the recipe only after both architecture
 assets and regenerated source checksums are verified, then rebuilds and deploys
 the complete repository before committing the recipe change. No newer release
 is a no-op; detection, asset, checksum, or build failures do not deploy or

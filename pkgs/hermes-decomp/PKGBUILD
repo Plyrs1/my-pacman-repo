@@ -1,0 +1,38 @@
+# Maintainer: Plyrs1 <me@plyrs.eu.org>
+# Upstream: https://github.com/SymbioticSec/hermes-decomp
+
+pkgname=hermes-decomp
+pkgver=0.2.4
+pkgrel=1
+pkgdesc='Rust decompiler for Hermes bytecode (.hbc) files'
+arch=('x86_64' 'aarch64')
+url='https://github.com/SymbioticSec/hermes-decomp'
+license=('MIT')
+conflicts=('hermes-decomp-bin')
+depends=('gcc-libs' 'glibc')
+makedepends=('cargo')
+source=("hermes-decomp-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('ffd8e8a5840bccd37b3f9a9c9ca70659a84f9655bbb6c3c54dc5bf3cbdefbe01')
+
+prepare() {
+  cd "${pkgname}-${pkgver}"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "${pkgname}-${pkgver}"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release --workspace
+}
+
+package() {
+  cd "${pkgname}-${pkgver}"
+  install -Dm755 target/release/hermes-decomp \
+    "${pkgdir}/usr/bin/hermes-decomp"
+  install -Dm755 target/release/hermes-mcp \
+    "${pkgdir}/usr/bin/hermes-mcp"
+  install -Dm644 LICENSE \
+    "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
